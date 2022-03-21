@@ -766,6 +766,12 @@ function build_libdeflate {
   	echo " done!"
 }
 function build_shell2 {
+	if [ "$DO_STATIC" == "yes" ]; then
+		local EXTRA_FLAGS="--disable-shared --enable-static"
+	else
+		local EXTRA_FLAGS="--enable-shared --disable-static"
+	fi
+
 	echo -n "[SSH2] downloading $LIBSSH2_VERSION..."
 	download_file "https://github.com/libssh2/libssh2/releases/download/libssh2-$LIBSSH2_VERSION/libssh2-$LIBSSH2_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
 	mv libssh2-$LIBSSH2_VERSION ssh2
@@ -774,7 +780,8 @@ function build_shell2 {
 	echo -n " checking..."
 
 	RANLIB=$RANLIB ./configure \
-	--prefix="$DIR/bin/php7" \
+	--prefix="$INSTALL_DIR" \
+	$EXTRA_FLAGS \
 	$CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
 	sed -i=".backup" 's/ tests win32/ win32/g' Makefile
 	echo -n " compiling..."
@@ -1149,4 +1156,3 @@ fi
 date >> "$DIR/install.log" 2>&1
 echo "[PocketMine] You should start the server now using \"./start.sh\"."
 echo "[PocketMine] If it doesn't work, please send the \"install.log\" file to the Bug Tracker."
-tar zcvf PHP-8.0-Linux-x86_64.tar.gz bin/
