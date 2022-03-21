@@ -762,7 +762,6 @@ function build_libdeflate {
 	fi
 	cd ..
   	echo " done!"
-  }
 }
 function build_shell2 {
 	echo -n "[SSH2] downloading 1.9.0..."
