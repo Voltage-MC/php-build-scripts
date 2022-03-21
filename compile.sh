@@ -14,9 +14,11 @@ LIBZIP_VERSION="1.8.0"
 SQLITE3_YEAR="2022"
 SQLITE3_VERSION="3370200" #3.37.2
 LIBDEFLATE_VERSION="6c095314d0c49061f41e1e40be2625dfc2253afa" #1.9
+LIBSSH2_VERSION="1.9.0"
 
 EXT_PTHREADS_VERSION="4.0.0"
 EXT_YAML_VERSION="2.2.2"
+EXT_SSH2_VERSION="1.3.1"
 EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.1"
 EXT_XDEBUG_VERSION="3.1.2"
@@ -764,9 +766,9 @@ function build_libdeflate {
   	echo " done!"
 }
 function build_shell2 {
-	echo -n "[SSH2] downloading 1.9.0..."
-	download_file "https://github.com/libssh2/libssh2/releases/download/libssh2-1.9.0/libssh2-1.9.0.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
-	mv libssh2-1.9.0 ssh2
+	echo -n "[SSH2] downloading $LIBSSH2_VERSION..."
+	download_file "https://github.com/libssh2/libssh2/releases/download/libssh2-$LIBSSH2_VERSION/libssh2-$LIBSSH2_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
+	mv libssh2-$LIBSSH2_VERSION ssh2
 	cd ssh2
 
 	echo -n " checking..."
@@ -867,8 +869,8 @@ get_github_extension "pthreads" "$EXT_PTHREADS_VERSION" "pmmp" "pthreads" #"v" n
 get_github_extension "yaml" "$EXT_YAML_VERSION" "php" "pecl-file_formats-yaml"
 #get_pecl_extension "yaml" "$EXT_YAML_VERSION"
 
-#get_github_extension "ssh2" "$EXT_YAML_VERSION" "php" "pecl-file_formats-ssh2"
-get_pecl_extension "ssh2" "1.3.1"
+#get_github_extension "ssh2" "$EXT_SSH2_VERSION" "php" "pecl-file_formats-ssh2"
+get_pecl_extension "ssh2" "$EXT_SSH2_VERSION"
 
 get_github_extension "igbinary" "$EXT_IGBINARY_VERSION" "igbinary" "igbinary"
 
