@@ -33,6 +33,10 @@ set PHP_RECURSIONGUARD_VER=0.1.0
 set PHP_MORTON_VER=0.1.2
 set PHP_LIBDEFLATE_VER=0.1.0
 set PHP_XXHASH_VER=0.1.1
+set PHP_LIBMONGODB_VER=1.12.1
+
+set PHP_VANILLAGENERATOR_VER=56fc48ea1367e1d08b228dfa580b513fbec8ca31
+set PHP_ZSTD_VER=0.11.0
 
 set script_path=%~dp0
 set log_file=%script_path%compile.log
@@ -201,6 +205,15 @@ call :get-extension-zip-from-github "recursionguard"        "%PHP_RECURSIONGUARD
 call :get-extension-zip-from-github "morton"                "%PHP_MORTON_VER%"                "pmmp"     "ext-morton"              || exit 1
 call :get-extension-zip-from-github "libdeflate"            "%PHP_LIBDEFLATE_VER%"            "pmmp"     "ext-libdeflate"          || exit 1
 call :get-extension-zip-from-github "xxhash"                "%PHP_XXHASH_VER%"                "pmmp"     "ext-xxhash"              || exit 1
+call :get-extension-zip-from-pecl   "mongodb"               "%PHP_LIBMONGODB_VER%"            "mongodb"                            || exit 1
+call :get-extension-zip-from-github "vanillagenerator"      "%PHP_VANILLAGENERATOR_VER%" "NetherGamesMC" "ext-vanillagenerator"    || exit 1
+
+call :pm-echo " - zstd: downloading %PHP_ZSTD_VER%..."
+git clone https://github.com/kjdev/php-ext-zstd.git zstd >>"%log_file%" 2>&1 || exit 1
+cd /D zstd
+git checkout %PHP_ZSTD_VER% >>"%log_file%" 2>&1 || exit 1
+git submodule update --init --recursive >>"%log_file%" 2>&1 || exit 1
+cd /D ..
 
 call :pm-echo " - crypto: downloading %PHP_CRYPTO_VER%..."
 git clone https://github.com/bukka/php-crypto.git crypto >>"%log_file%" 2>&1 || exit 1
@@ -223,6 +236,8 @@ call configure^
  --with-mp=auto^
  --with-prefix=pocketmine-php-bin^
  --%PHP_HAVE_DEBUG%^
+ --with-mongodb-system-libs="yes"^
+ --with-mongodb-ssl^
  --disable-all^
  --disable-cgi^
  --enable-cli^
@@ -243,6 +258,8 @@ call configure^
  --enable-opcache^
  --enable-opcache-jit^
  --enable-phar^
+ --enable-vanillagenerator^
+ --enable-zstd^
  --enable-recursionguard=shared^
  --enable-sockets^
  --enable-tokenizer^
@@ -329,6 +346,7 @@ call :pm-echo "Generating php.ini..."
 (echo extension=php_sqlite3.dll)>>"%php_ini%"
 (echo ;Optional extensions, supplied for debugging)>>"%php_ini%"
 (echo extension=php_recursionguard.dll)>>"%php_ini%"
+(echo extension=mongodb.dll)>>"%php_ini%"
 (echo recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging)>>"%php_ini%"
 (echo.)>>"%php_ini%"
 (echo ; ---- ! WARNING ! ----)>>"%php_ini%"
@@ -380,6 +398,10 @@ call :get-zip https://github.com/%~3/%~4/archive/%~2.zip || exit /B 1
 move %~4-%~2 %~1 >>"%log_file%" 2>&1 || exit /B 1
 exit /B 0
 
+:get-extension-zip-from-pecl:
+call :pm-echo " - %~1: downloading %~2..."
+call :get-zip https://windows.php.net/downloads/pecl/releases/%~3/%~2/php_%~3-%~2-%PHP_MAJOR_VER%-nts-vs16-x64.zip || exit /B 1
+exit /B 0
 
 :get-zip
 wget %~1 --no-check-certificate -q -O temp.zip || exit /B 1
