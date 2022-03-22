@@ -14,20 +14,23 @@ LIBZIP_VERSION="1.8.0"
 SQLITE3_YEAR="2022"
 SQLITE3_VERSION="3370200" #3.37.2
 LIBDEFLATE_VERSION="6c095314d0c49061f41e1e40be2625dfc2253afa" #1.9
-LIBSSH2_VERSION="1.9.0"
+LIBSSH2_VERSION="1.10.0"
 
 EXT_PTHREADS_VERSION="4.0.0"
 EXT_YAML_VERSION="2.2.2"
-EXT_SSH2_VERSION="1.3.1"
 EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.1"
 EXT_XDEBUG_VERSION="3.1.2"
 EXT_IGBINARY_VERSION="3.2.7"
+EXT_MONGO_VERSION="1.12.1"
 EXT_CRYPTO_VERSION="0.3.2"
 EXT_RECURSIONGUARD_VERSION="0.1.0"
 EXT_LIBDEFLATE_VERSION="0.1.0"
+EXT_SSH2_VERSION="1.3.1"
 EXT_MORTON_VERSION="0.1.2"
 EXT_XXHASH_VERSION="0.1.1"
+EXT_VANILLAGENERATOR_VERSION="56fc48ea1367e1d08b228dfa580b513fbec8ca31"
+EXT_ZSTD_VERSION="0.11.0"
 
 function write_out {
 	echo "[$1] $2"
@@ -881,7 +884,12 @@ get_pecl_extension "ssh2" "$EXT_SSH2_VERSION"
 
 get_github_extension "igbinary" "$EXT_IGBINARY_VERSION" "igbinary" "igbinary"
 
+#get_pecl_extension "mongodb" "$EXT_MONGO_VERSION"
+
 get_github_extension "recursionguard" "$EXT_RECURSIONGUARD_VERSION" "pmmp" "ext-recursionguard"
+
+#get_github_extension "zstd" "$EXT_ZSTD_VERSION" "kjdev" "php-ext-zstd"
+get_pecl_extension "zstd" "$EXT_ZSTD_VERSION"
 
 echo -n "  crypto: downloading $EXT_CRYPTO_VERSION..."
 git clone https://github.com/bukka/php-crypto.git "$BUILD_DIR/php/ext/crypto" >> "$DIR/install.log" 2>&1
@@ -900,6 +908,8 @@ get_github_extension "libdeflate" "$EXT_LIBDEFLATE_VERSION" "pmmp" "ext-libdefla
 get_github_extension "morton" "$EXT_MORTON_VERSION" "pmmp" "ext-morton"
 
 get_github_extension "xxhash" "$EXT_XXHASH_VERSION" "pmmp" "ext-xxhash"
+
+get_github_extension "vanillagenerator" "$EXT_VANILLAGENERATOR_VERSION" "NetherGamesMC" "ext-vanillagenerator"
 
 echo -n "[PHP]"
 
@@ -986,6 +996,8 @@ RANLIB=$RANLIB CFLAGS="$CFLAGS $FLAGS_LTO" CXXFLAGS="$CXXFLAGS $FLAGS_LTO" LDFLA
 --with-openssl \
 --with-ssh2 \
 --with-zip \
+--with-mongodb-system-libs="yes" \
+--with-mongodb-ssl \
 --with-libdeflate="$INSTALL_DIR" \
 $HAS_LIBJPEG \
 $HAS_GD \
@@ -1028,7 +1040,9 @@ $HAVE_MYSQLI \
 --enable-ftp \
 --enable-opcache=$HAVE_OPCACHE \
 --enable-opcache-jit=$HAVE_OPCACHE \
+--enable-zstd \
 --enable-igbinary \
+--enable-vanillagenerator \
 --with-crypto \
 --enable-recursionguard \
 --enable-xxhash \
@@ -1092,6 +1106,7 @@ echo "short_open_tag=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "asp_tags=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "phar.require_hash=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "igbinary.compact_strings=0" >> "$INSTALL_DIR/bin/php.ini"
+echo "extension=mongodb.so" >> "$INSTALL_DIR/bin/php.ini"
 if [[ "$COMPILE_DEBUG" == "yes" ]]; then
 	echo "zend.assertions=1" >> "$INSTALL_DIR/bin/php.ini"
 else
@@ -1101,6 +1116,7 @@ echo "error_reporting=-1" >> "$INSTALL_DIR/bin/php.ini"
 echo "display_errors=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "display_startup_errors=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging" >> "$INSTALL_DIR/bin/php.ini"
+echo "extension_dir=./$INSTALL_DIR/lib/php/extensions/no-debug-zts-20200930" >> "$INSTALL_DIR/bin/php.ini"
 
 if [ "$HAVE_OPCACHE" == "yes" ]; then
 	echo "zend_extension=opcache.so" >> "$INSTALL_DIR/bin/php.ini"
@@ -1120,6 +1136,23 @@ if [ "$HAVE_OPCACHE" == "yes" ]; then
 fi
 
 echo " done!"
+
+function build_mongo {
+  echo -n "[MongoDB] downloading $EXT_MONGO_VERSION..."
+  git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
+  echo -n " checking..."
+  cd mongo-php-driver
+  git submodule update --init  >> "$DIR/install.log" 2>&1
+  $DIR/bin/php7/bin/phpize >> "$DIR/install.log" 2>&1
+  ./configure --with-php-config="$DIR/bin/php7/bin/php-config" >> "$DIR/install.log" 2>&1
+  echo -n " compiling..."
+  make all >> "$DIR/install.log" 2>&1
+  echo -n " installing..."
+  make install >> "$DIR/install.log" 2>&1
+	echo " done!"
+}
+
+build_mongo
 
 if [[ "$DO_STATIC" != "yes" ]] && [[ "$COMPILE_DEBUG" == "yes" ]]; then
 	get_pecl_extension "xdebug" "$EXT_XDEBUG_VERSION"
