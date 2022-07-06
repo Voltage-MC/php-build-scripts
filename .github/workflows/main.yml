@@ -30,11 +30,24 @@ jobs:
         
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
+        if: always()
         with:
           name: Ubuntu
           path: |
             ./PHP_Linux-x86_64.tar.gz
             install.log
+          if-no-files-found: error
+      - name: Prepare workspace for upload
+        if: failure()
+        run: tar -czf workspace.tar.gz install_data
+
+      - name: Upload workspace
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: Linux-workspace
+          path: |
+            workspace.tar.gz
           if-no-files-found: error
     
   macos:
@@ -64,6 +77,20 @@ jobs:
           path: |
             ./PHP_MacOS-x86_64.tar.gz
             install.log
+            compile.sh
+                if-no-files-found: error
+
+      - name: Prepare workspace for upload
+        if: failure()
+        run: tar -czf workspace.tar.gz install_data
+
+      - name: Upload workspace
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: MacOS-workspace
+          path: |
+            workspace.tar.gz
           if-no-files-found: error
 
   windows:
@@ -84,9 +111,11 @@ jobs:
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
+        if: always()
         with:
           name: Windows
           path: |
             php-*.zip
             compile.log
+            windows-compile-vs.bat
           if-no-files-found: error
