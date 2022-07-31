@@ -15,6 +15,7 @@ SQLITE3_YEAR="2022"
 SQLITE3_VERSION="3380500" #3.38.5
 LIBDEFLATE_VERSION="b01537448e8eaf0803e38bdba5acef1d1c8effba" #1.11
 LIBSSH2_VERSION="1.10.0"
+LIBSMONGO_VERSION="1.5.1"
 
 EXT_PTHREADS_VERSION="4.0.0"
 EXT_YAML_VERSION="2.2.2"
@@ -22,14 +23,14 @@ EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.3"
 EXT_XDEBUG_VERSION="3.1.4"
 EXT_IGBINARY_VERSION="3.2.7"
-EXT_MONGO_VERSION="1.12.1"
+EXT_MONGO_VERSION="1.14.0"
 EXT_CRYPTO_VERSION="0.3.2"
 EXT_RECURSIONGUARD_VERSION="0.1.0"
 EXT_LIBDEFLATE_VERSION="0.1.0"
 EXT_SSH2_VERSION="1.3.1"
 EXT_MORTON_VERSION="0.1.2"
+EXT_VANILLAGENERATOR_VERSION="master"
 EXT_XXHASH_VERSION="0.1.1"
-EXT_VANILLAGENERATOR_VERSION="56fc48ea1367e1d08b228dfa580b513fbec8ca31"
 EXT_ZSTD_VERSION="0.11.0"
 
 function write_out {
@@ -744,30 +745,7 @@ function build_sqlite3 {
 	cd ..
 	echo " done!"
 }
-function build_libdeflate {
-	echo -n "[libdeflate] downloading $LIBDEFLATE_VERSION..."
-	download_file "https://github.com/ebiggers/libdeflate/archive/$LIBDEFLATE_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
-	mv libdeflate-$LIBDEFLATE_VERSION libdeflate >> "$DIR/install.log" 2>&1
-	cd libdeflate
-	if [ "$DO_STATIC" == "yes" ]; then
-		echo -n " compiling..."
-		make -j $THREADS libdeflate.a >> "$DIR/install.log" 2>&1
-		echo -n " manually copying installation files for static build..."
-		cp ./libdeflate.a "$DIR/bin/php7/lib"
-		cp ./libdeflate.h "$DIR/bin/php7/include"
-	else
-		echo -n " compiling..."
-		PREFIX="$DIR/bin/php7" make -j $THREADS install >> "$DIR/install.log" 2>&1
-		echo -n " cleaning..."
-		rm "$DIR/bin/php7/lib/libdeflate.a"
-		if [ "$(uname -s)" == "Darwin" ]; then
-			#libdeflate makefile doesn't set this correctly
-			install_name_tool -id "$DIR/bin/php7/lib/libdeflate.0.dylib" "$DIR/bin/php7/lib/libdeflate.0.dylib"
-		fi
-	fi
-	cd ..
-  	echo " done!"
-}
+
 function build_shell2 {
 	if [ "$DO_STATIC" == "yes" ]; then
 		local EXTRA_FLAGS="--disable-shared --enable-static"
@@ -825,7 +803,6 @@ build_gmp
 build_openssl
 build_curl
 build_yaml
-
 build_shell2
 build_leveldb
 if [ "$COMPILE_GD" == "yes" ]; then
@@ -884,8 +861,6 @@ get_pecl_extension "ssh2" "$EXT_SSH2_VERSION"
 
 get_github_extension "igbinary" "$EXT_IGBINARY_VERSION" "igbinary" "igbinary"
 
-#get_pecl_extension "mongodb" "$EXT_MONGO_VERSION"
-
 get_github_extension "recursionguard" "$EXT_RECURSIONGUARD_VERSION" "pmmp" "ext-recursionguard"
 
 #get_github_extension "zstd" "$EXT_ZSTD_VERSION" "kjdev" "php-ext-zstd"
@@ -909,7 +884,8 @@ get_github_extension "morton" "$EXT_MORTON_VERSION" "pmmp" "ext-morton"
 
 get_github_extension "xxhash" "$EXT_XXHASH_VERSION" "pmmp" "ext-xxhash"
 
-get_github_extension "vanillagenerator" "$EXT_VANILLAGENERATOR_VERSION" "NetherGamesMC" "ext-vanillagenerator"
+get_github_extension "vanillagenerator" "$EXT_VANILLAGENERATOR_VERSION" "RECT-inc" "ext-vanillagenerator"
+
 
 echo -n "[PHP]"
 
@@ -994,10 +970,7 @@ RANLIB=$RANLIB CFLAGS="$CFLAGS $FLAGS_LTO" CXXFLAGS="$CXXFLAGS $FLAGS_LTO" LDFLA
 --with-gmp \
 --with-yaml \
 --with-openssl \
---with-ssh2 \
 --with-zip \
---with-mongodb-system-libs="yes" \
---with-mongodb-ssl \
 --with-libdeflate="$INSTALL_DIR" \
 $HAS_LIBJPEG \
 $HAS_GD \
@@ -1024,6 +997,10 @@ $HAS_DEBUG \
 --without-iconv \
 --with-pdo-sqlite \
 --with-pdo-mysql \
+--with-libbson="yes" \
+--with--libmongoc="yes" \
+--with-mongodb-system-libs="yes" \
+--with-mongodb-ssl="auto" \
 --with-pic \
 --enable-phar \
 --enable-ctype \
@@ -1106,7 +1083,6 @@ echo "short_open_tag=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "asp_tags=0" >> "$INSTALL_DIR/bin/php.ini"
 echo "phar.require_hash=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "igbinary.compact_strings=0" >> "$INSTALL_DIR/bin/php.ini"
-echo "extension=mongodb.so" >> "$INSTALL_DIR/bin/php.ini"
 if [[ "$COMPILE_DEBUG" == "yes" ]]; then
 	echo "zend.assertions=1" >> "$INSTALL_DIR/bin/php.ini"
 else
@@ -1116,7 +1092,6 @@ echo "error_reporting=-1" >> "$INSTALL_DIR/bin/php.ini"
 echo "display_errors=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "display_startup_errors=1" >> "$INSTALL_DIR/bin/php.ini"
 echo "recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging" >> "$INSTALL_DIR/bin/php.ini"
-echo "extension_dir=./$INSTALL_DIR/lib/php/extensions/no-debug-zts-20200930" >> "$INSTALL_DIR/bin/php.ini"
 
 if [ "$HAVE_OPCACHE" == "yes" ]; then
 	echo "zend_extension=opcache.so" >> "$INSTALL_DIR/bin/php.ini"
@@ -1137,22 +1112,19 @@ fi
 
 echo " done!"
 
-function build_mongo {
-  echo -n "[MongoDB] downloading $EXT_MONGO_VERSION..."
-  git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
-  echo -n " checking..."
-  cd mongo-php-driver
-  git submodule update --init  >> "$DIR/install.log" 2>&1
-  $DIR/bin/php7/bin/phpize >> "$DIR/install.log" 2>&1
-  ./configure --with-php-config="$DIR/bin/php7/bin/php-config" >> "$DIR/install.log" 2>&1
-  echo -n " compiling..."
-  make all >> "$DIR/install.log" 2>&1
-  echo -n " installing..."
-  make install >> "$DIR/install.log" 2>&1
-	echo " done!"
-}
-
-build_mongo
+echo -n "[MongoDB] downloading..."
+git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
+echo -n " checking..."
+cd mongo-php-driver
+git submodule update --init  >> "$DIR/install.log" 2>&1
+$DIR/bin/php7/bin/phpize >> "$DIR/install.log" 2>&1
+./configure --with-php-config="$DIR/bin/php7/bin/php-config" >> "$DIR/install.log" 2>&1
+echo -n " compiling..."
+make all >> "$DIR/install.log" 2>&1
+echo -n " installing..."
+make install >> "$DIR/install.log" 2>&1
+echo "extension=mongodb.so" >> "$DIR/bin/php7/bin/php.ini"
+echo " done!"
 
 if [[ "$DO_STATIC" != "yes" ]] && [[ "$COMPILE_DEBUG" == "yes" ]]; then
 	get_pecl_extension "xdebug" "$EXT_XDEBUG_VERSION"
