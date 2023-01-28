@@ -5,7 +5,7 @@ use ``./compile.sh -t linux64 -j 4 -f -g``
 
 ## compile.sh
 
-Bash script used to compile PHP on Linux platforms. Make sure you have ``apt install -y autoconf automake libtool libtool-bin m4 wget gzip bzip2 bison g++ git cmake pkg-config re2c libssh2-1 libssh2-1-dev``.
+Bash script used to compile PHP on Linux platforms. Make sure you have ``apt install -y make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git re2c libssh2-1 libssh2-1-dev``.
 
 | Script flags | Description                                                                           |
 | ------------ | ------------------------------------------------------------------------------------- |
@@ -23,9 +23,9 @@ Bash script used to compile PHP on Linux platforms. Make sure you have ``apt ins
 
 ### Example:
 
-| Target          | Arguments                        |
-| --------------- | -------------------------------- |
-| linux64         | ``-t linux64 -l -j4 -f x86_64``  |
+| Target    | Arguments                        |
+|-----------| -------------------------------- |
+| linux x64 | ``-t linux64 -j 4 -f -g -P x86_64``  |
 
 ### Common pitfalls
 - If used, the `-t` option (target) MUST be specified BEFORE the `-f` option (optimizations)

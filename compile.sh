@@ -16,6 +16,7 @@ SQLITE3_VERSION="3400000" #3.40.0
 LIBDEFLATE_VERSION="0d1779a071bcc636e5156ddb7538434da7acad22" #1.14
 LIBSSH2_VERSION="1.10.0"
 LIBSMONGO_VERSION="1.5.1"
+LIBREDIS_VERSION="5.3.7"
 
 EXT_PTHREADS_VERSION_PM4="4.2.1"
 EXT_PTHREADS_VERSION_PM5="5.1.3"
@@ -34,6 +35,7 @@ EXT_MORTON_VERSION="0.1.2"
 EXT_VANILLAGENERATOR_VERSION="master"
 EXT_XXHASH_VERSION="0.1.1"
 EXT_ZSTD_VERSION="0.11.0"
+EXT_REDIS_VERSION="5.3.7"
 
 function write_out {
 	echo "[$1] $2"
@@ -820,6 +822,34 @@ function build_libdeflate {
 	echo " done!"
 }
 
+
+function build_redis {
+	if [ "$DO_STATIC" == "yes" ]; then
+		local EXTRA_FLAGS="--disable-shared --enable-static"
+	else
+		local EXTRA_FLAGS="--enable-shared --disable-static"
+	fi
+
+	echo -n "[REDIS] downloading $LIBREDIS_VERSION..."
+	download_file "https://github.com/phpredis/phpredis/archive/refs/tags/$LIBREDIS_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
+	mv libssh2-$LIBSSH2_VERSION ssh2
+	cd redis
+
+	echo -n " checking..."
+
+	RANLIB=$RANLIB ./configure \
+	--prefix="$INSTALL_DIR" \
+	$EXTRA_FLAGS \
+	$CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
+	sed -i=".backup" 's/ tests win32/ win32/g' Makefile
+	echo -n " compiling..."
+	make -j $THREADS all >> "$DIR/install.log" 2>&1
+	echo -n " installing..."
+	make install >> "$DIR/install.log" 2>&1
+	cd ..
+	echo " done!"
+}
+
 build_zlib
 build_gmp
 build_openssl
@@ -841,6 +871,7 @@ build_libxml2
 build_libzip
 build_sqlite3
 build_libdeflate
+build_redis
 
 # PECL libraries
 
@@ -880,6 +911,8 @@ get_github_extension "yaml" "$EXT_YAML_VERSION" "php" "pecl-file_formats-yaml"
 
 #get_github_extension "ssh2" "$EXT_SSH2_VERSION" "php" "pecl-file_formats-ssh2"
 get_pecl_extension "ssh2" "$EXT_SSH2_VERSION"
+
+get_pecl_extension "redis" "$EXT_REDIS_VERSION"
 
 get_github_extension "igbinary" "$EXT_IGBINARY_VERSION" "igbinary" "igbinary"
 
@@ -1023,6 +1056,7 @@ $HAS_DEBUG \
 --with--libmongoc="yes" \
 --with-mongodb-system-libs="yes" \
 --with-mongodb-ssl="auto" \
+--enable-redis \
 --with-pic \
 --enable-phar \
 --enable-ctype \
