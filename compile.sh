@@ -834,8 +834,8 @@ function build_redis {
 	echo -n "[REDIS] downloading $LIBREDIS_VERSION..."
 	# https://github.com/phpredis/phpredis/archive/refs/tags/5.3.7.tar.gz
 	download_file "https://github.com/phpredis/phpredis/archive/refs/tags/$LIBREDIS_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
-	mv $LIBREDIS_VERSION redis
-	cd redis
+	mv phpredis-$LIBREDIS_VERSION phpredis
+	cd phpredis
 
 	echo -n " checking..."
 
@@ -1058,7 +1058,7 @@ $HAS_DEBUG \
 --with--libmongoc="yes" \
 --with-mongodb-system-libs="yes" \
 --with-mongodb-ssl="auto" \
---enable-redis \
+--enable-phpredis \
 --with-pic \
 --enable-phar \
 --enable-ctype \
