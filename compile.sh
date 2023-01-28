@@ -1,28 +1,30 @@
 #!/bin/bash
-[ -z "$PHP_VERSION" ] && PHP_VERSION="8.0.19"
+[ -z "$PHP_VERSION" ] && PHP_VERSION="8.2.1"
 
-ZLIB_VERSION="1.2.11" #1.2.12 breaks on macOS and probably cross-compile too due to ignoring $CC
+ZLIB_VERSION="1.2.13"
 GMP_VERSION="6.2.1"
-CURL_VERSION="curl-7_83_1"
+CURL_VERSION="curl-7_86_0"
 YAML_VERSION="0.2.5"
 LEVELDB_VERSION="1c7564468b41610da4f498430e795ca4de0931ff"
-LIBXML_VERSION="2.9.14"
-LIBPNG_VERSION="1.6.37"
+LIBXML_VERSION="2.10.1" #2.10.2 requires automake 1.16.3, which isn't easily available on Ubuntu 20.04
+LIBPNG_VERSION="1.6.38"
 LIBJPEG_VERSION="9e"
-OPENSSL_VERSION="1.1.1o"
-LIBZIP_VERSION="1.8.0"
+OPENSSL_VERSION="1.1.1s"
+LIBZIP_VERSION="1.9.2"
 SQLITE3_YEAR="2022"
-SQLITE3_VERSION="3380500" #3.38.5
-LIBDEFLATE_VERSION="b01537448e8eaf0803e38bdba5acef1d1c8effba" #1.11
+SQLITE3_VERSION="3400000" #3.40.0
+LIBDEFLATE_VERSION="0d1779a071bcc636e5156ddb7538434da7acad22" #1.14
 LIBSSH2_VERSION="1.10.0"
 LIBSMONGO_VERSION="1.5.1"
 
-EXT_PTHREADS_VERSION="4.0.0"
+EXT_PTHREADS_VERSION_PM4="4.2.1"
+EXT_PTHREADS_VERSION_PM5="5.1.3"
+EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM4"
 EXT_YAML_VERSION="2.2.2"
 EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.3"
-EXT_XDEBUG_VERSION="3.1.4"
-EXT_IGBINARY_VERSION="3.2.7"
+EXT_XDEBUG_VERSION="3.2.0"
+EXT_IGBINARY_VERSION="3.2.12"
 EXT_MONGO_VERSION="1.14.0"
 EXT_CRYPTO_VERSION="0.3.2"
 EXT_RECURSIONGUARD_VERSION="0.1.0"
@@ -122,6 +124,7 @@ DO_CLEANUP="yes"
 COMPILE_DEBUG="no"
 HAVE_VALGRIND="--without-valgrind"
 HAVE_OPCACHE="yes"
+HAVE_XDEBUG="yes"
 FSANITIZE_OPTIONS=""
 FLAGS_LTO=""
 
@@ -129,7 +132,9 @@ LD_PRELOAD=""
 
 COMPILE_GD="no"
 
-while getopts "::t:j:srdxff:gnva:" OPTION; do
+PM_VERSION_MAJOR="4"
+
+while getopts "::t:j:srdxff:gnva:P:" OPTION; do
 
 	case $OPTION in
 		t)
@@ -141,7 +146,7 @@ while getopts "::t:j:srdxff:gnva:" OPTION; do
 			THREADS="$OPTARG"
 			;;
 		d)
-			echo "[opt] Will compile xdebug, will not remove sources"
+			echo "[opt] Will compile everything with debugging symbols, will not remove sources"
 			COMPILE_DEBUG="yes"
 			DO_CLEANUP="no"
 			CFLAGS="$CFLAGS -g"
@@ -177,12 +182,22 @@ while getopts "::t:j:srdxff:gnva:" OPTION; do
 			echo "[opt] Will pass -fsanitize=$OPTARG to compilers and linkers"
 			FSANITIZE_OPTIONS="$OPTARG"
 			;;
+		P)
+			PM_VERSION_MAJOR="$OPTARG"
+			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
 			exit 1
 			;;
 	esac
 done
+
+if [ "$PM_VERSION_MAJOR" -ge 5 ]; then
+	EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM5"
+else
+	EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM4"
+fi
+write_out "opt" "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJOR"
 
 GMP_ABI=""
 TOOLCHAIN_PREFIX=""
@@ -300,11 +315,15 @@ if [ "$DO_STATIC" == "yes" ]; then
 	if [ "$FSANITIZE_OPTIONS" != "" ]; then
 		echo "[warning] Sanitizers cannot be used on static builds"
 	fi
+	if [ "$HAVE_XDEBUG" == "yes" ]; then
+	  write_out "warning" "Xdebug cannot be built in static mode"
+	  HAVE_XDEBUG="no"
+	fi
 fi
 
 if [ "$DO_OPTIMIZE" != "no" ]; then
 	#FLAGS_LTO="-fvisibility=hidden -flto"
-	CFLAGS="$CFLAGS -O2 -ffast-math -ftree-vectorize -fomit-frame-pointer -funswitch-loops -fivopts"
+	CFLAGS="$CFLAGS -O2 -ftree-vectorize -fomit-frame-pointer -funswitch-loops -fivopts"
 	if [ "$COMPILE_TARGET" != "mac-x86-64" ] && [ "$COMPILE_TARGET" != "mac-arm64" ]; then
 		CFLAGS="$CFLAGS -funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range"
 	fi
@@ -336,7 +355,10 @@ echo "}" >> test.c
 
 type $CC >> "$DIR/install.log" 2>&1 || { echo >&2 "[ERROR] Please install \"$CC\""; exit 1; }
 
-[ -z "$THREADS" ] && THREADS=1;
+if [ -z "$THREADS" ]; then
+	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."	
+	THREADS=1;
+fi
 [ -z "$march" ] && march=native;
 [ -z "$mtune" ] && mtune=native;
 [ -z "$CFLAGS" ] && CFLAGS="";
@@ -1109,6 +1131,12 @@ if [ "$HAVE_OPCACHE" == "yes" ]; then
 	echo "opcache.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.jit_buffer_size=128M" >> "$INSTALL_DIR/bin/php.ini"
 fi
+if [ "$COMPILE_TARGET" == "mac-"* ]; then
+	#we don't have permission to allocate executable memory on macOS due to not being codesigned
+	#workaround this for now by disabling PCRE JIT
+	echo "" >> "$INSTALL_DIR/bin/php.ini"
+	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
+fi
 
 echo " done!"
 
@@ -1126,7 +1154,7 @@ make install >> "$DIR/install.log" 2>&1
 echo "extension=mongodb.so" >> "$DIR/bin/php7/bin/php.ini"
 echo " done!"
 
-if [[ "$DO_STATIC" != "yes" ]] && [[ "$COMPILE_DEBUG" == "yes" ]]; then
+if [[ "$HAVE_XDEBUG" == "yes" ]]; then
 	get_pecl_extension "xdebug" "$EXT_XDEBUG_VERSION"
 	echo -n "[xdebug] checking..."
 	cd "$BUILD_DIR/php/ext/xdebug"
@@ -1136,8 +1164,18 @@ if [[ "$DO_STATIC" != "yes" ]] && [[ "$COMPILE_DEBUG" == "yes" ]]; then
 	make -j4 >> "$DIR/install.log" 2>&1
 	echo -n " installing..."
 	make install >> "$DIR/install.log" 2>&1
-	echo "zend_extension=xdebug.so" >> "$INSTALL_DIR/bin/php.ini"
+	echo "" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo ";WARNING: When loaded, xdebug 3.2.0 will cause segfaults whenever an uncaught error is thrown, even if xdebug.mode=off. Load it at your own risk." >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo ";zend_extension=xdebug.so" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo ";https://xdebug.org/docs/all_settings#mode" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo "xdebug.mode=off" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo "xdebug.start_with_request=yes" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo ";The following overrides allow profiler, gc stats and traces to work correctly in ZTS" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo "xdebug.profiler_output_name=cachegrind.%s.%p.%r" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo "xdebug.gc_stats_output_name=gcstats.%s.%p.%r" >> "$INSTALL_DIR/bin/php.ini" 2>&1
+	echo "xdebug.trace_output_name=trace.%s.%p.%r" >> "$INSTALL_DIR/bin/php.ini" 2>&1
 	echo " done!"
+	write_out INFO "Xdebug is included, but disabled by default. To enable it, change 'xdebug.mode' in your php.ini file."
 fi
 
 cd "$DIR"
