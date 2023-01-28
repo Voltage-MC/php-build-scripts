@@ -779,6 +779,7 @@ function build_shell2 {
 
 	echo -n "[SSH2] downloading $LIBSSH2_VERSION..."
 	download_file "https://github.com/libssh2/libssh2/releases/download/libssh2-$LIBSSH2_VERSION/libssh2-$LIBSSH2_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
+	ls -l >> "$DIR/install.log" 2>&1
 	mv libssh2-$LIBSSH2_VERSION ssh2
 	cd ssh2
 
@@ -831,8 +832,9 @@ function build_redis {
 	fi
 
 	echo -n "[REDIS] downloading $LIBREDIS_VERSION..."
+	# https://github.com/phpredis/phpredis/archive/refs/tags/5.3.7.tar.gz
 	download_file "https://github.com/phpredis/phpredis/archive/refs/tags/$LIBREDIS_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
-	mv libssh2-$LIBSSH2_VERSION ssh2
+	mv $LIBREDIS_VERSION redis
 	cd redis
 
 	echo -n " checking..."
@@ -856,6 +858,7 @@ build_openssl
 build_curl
 build_yaml
 build_shell2
+build_redis
 build_leveldb
 if [ "$COMPILE_GD" == "yes" ]; then
 	build_libpng
@@ -871,7 +874,6 @@ build_libxml2
 build_libzip
 build_sqlite3
 build_libdeflate
-build_redis
 
 # PECL libraries
 
