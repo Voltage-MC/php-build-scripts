@@ -26,6 +26,7 @@ jobs:
           # Used "set -ex" instead of hashbang since script isn't executed with hashbang
           set -ex
           trap "exit 1" ERR
+          chmod 777 ./compile.sh
           ./compile.sh -t linux64 -j 4 -f -g -P ${{ matrix.pm-version-major }}
 
       - name: Create tarball
