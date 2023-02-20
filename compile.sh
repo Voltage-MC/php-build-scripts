@@ -15,8 +15,6 @@ SQLITE3_YEAR="2022"
 SQLITE3_VERSION="3400000" #3.40.0
 LIBDEFLATE_VERSION="0d1779a071bcc636e5156ddb7538434da7acad22" #1.14
 LIBSSH2_VERSION="1.10.0"
-LIBSMONGO_VERSION="1.5.1"
-LIBREDIS_VERSION="5.3.7"
 
 EXT_PTHREADS_VERSION_PM4="4.2.1"
 EXT_PTHREADS_VERSION_PM5="5.1.3"
@@ -26,7 +24,7 @@ EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.3"
 EXT_XDEBUG_VERSION="3.2.0"
 EXT_IGBINARY_VERSION="3.2.12"
-EXT_MONGO_VERSION="1.14.0"
+EXT_MONGO_VERSION="1.15.0"
 EXT_CRYPTO_VERSION="0.3.2"
 EXT_RECURSIONGUARD_VERSION="0.1.0"
 EXT_LIBDEFLATE_VERSION="0.1.0"
@@ -358,7 +356,7 @@ echo "}" >> test.c
 type $CC >> "$DIR/install.log" 2>&1 || { echo >&2 "[ERROR] Please install \"$CC\""; exit 1; }
 
 if [ -z "$THREADS" ]; then
-	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."	
+	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."
 	THREADS=1;
 fi
 [ -z "$march" ] && march=native;
@@ -682,8 +680,8 @@ function build_libjpeg {
 function build_libxml2 {
 	#libxml2
 	echo -n "[libxml] downloading $LIBXML_VERSION... "
-	download_file "https://gitlab.gnome.org/GNOME/libxml2/-/archive/v$LIBXML_VERSION/libxml2-v$LIBXML_VERSION.tar.gz" | tar -xz >> "$DIR/install.log" 2>&1
-	mv libxml2-v$LIBXML_VERSION libxml2
+	download_file "https://github.com/GNOME/libxml2/archive/refs/tags/v$LIBXML_VERSION.tar.gz" | tar -xz >> "$DIR/install.log" 2>&1
+	mv libxml2-$LIBXML_VERSION libxml2
 	echo -n "checking... "
 	cd libxml2
 	if [ "$DO_STATIC" == "yes" ]; then
@@ -777,7 +775,7 @@ function build_shell2 {
 		local EXTRA_FLAGS="--enable-shared --disable-static"
 	fi
 
-	echo -n "[SSH2] downloading $LIBSSH2_VERSION..."
+	echo -n "[ssh2] downloading $LIBSSH2_VERSION..."
 	download_file "https://github.com/libssh2/libssh2/releases/download/libssh2-$LIBSSH2_VERSION/libssh2-$LIBSSH2_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
 	ls -l >> "$DIR/install.log" 2>&1
 	mv libssh2-$LIBSSH2_VERSION ssh2
@@ -823,42 +821,12 @@ function build_libdeflate {
 	echo " done!"
 }
 
-
-function build_redis {
-	if [ "$DO_STATIC" == "yes" ]; then
-		local EXTRA_FLAGS="--disable-shared --enable-static"
-	else
-		local EXTRA_FLAGS="--enable-shared --disable-static"
-	fi
-
-	echo -n "[REDIS] downloading $LIBREDIS_VERSION..."
-	# https://github.com/phpredis/phpredis/archive/refs/tags/5.3.7.tar.gz
-	download_file "https://github.com/phpredis/phpredis/archive/refs/tags/$LIBREDIS_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
-	mv phpredis-$LIBREDIS_VERSION phpredis
-	cd phpredis
-
-	echo -n " checking..."
-
-	RANLIB=$RANLIB ./configure \
-	--prefix="$INSTALL_DIR" \
-	$EXTRA_FLAGS \
-	$CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
-	sed -i=".backup" 's/ tests win32/ win32/g' Makefile
-	echo -n " compiling..."
-	make -j $THREADS all >> "$DIR/install.log" 2>&1
-	echo -n " installing..."
-	make install >> "$DIR/install.log" 2>&1
-	cd ..
-	echo " done!"
-}
-
 build_zlib
 build_gmp
 build_openssl
 build_curl
 build_yaml
 build_shell2
-build_redis
 build_leveldb
 if [ "$COMPILE_GD" == "yes" ]; then
 	build_libpng
@@ -914,7 +882,7 @@ get_github_extension "yaml" "$EXT_YAML_VERSION" "php" "pecl-file_formats-yaml"
 #get_github_extension "ssh2" "$EXT_SSH2_VERSION" "php" "pecl-file_formats-ssh2"
 get_pecl_extension "ssh2" "$EXT_SSH2_VERSION"
 
-get_pecl_extension "redis" "$EXT_REDIS_VERSION"
+#get_pecl_extension "redis" "$EXT_REDIS_VERSION"
 
 get_github_extension "igbinary" "$EXT_IGBINARY_VERSION" "igbinary" "igbinary"
 
@@ -943,6 +911,7 @@ get_github_extension "xxhash" "$EXT_XXHASH_VERSION" "pmmp" "ext-xxhash"
 
 get_github_extension "vanillagenerator" "$EXT_VANILLAGENERATOR_VERSION" "RECT-inc" "ext-vanillagenerator"
 
+#get_github_extension "mongodb" "$EXT_MONGO_VERSION" "mongodb" "mongo-php-driver"
 
 echo -n "[PHP]"
 
@@ -1076,6 +1045,7 @@ $HAVE_MYSQLI \
 --enable-opcache=$HAVE_OPCACHE \
 --enable-opcache-jit=$HAVE_OPCACHE \
 --enable-zstd \
+--with-libzstd \
 --enable-igbinary \
 --enable-vanillagenerator \
 --with-crypto \
@@ -1174,8 +1144,6 @@ if [ "$COMPILE_TARGET" == "mac-"* ]; then
 	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 fi
 
-echo " done!"
-
 echo -n "[MongoDB] downloading..."
 git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
 echo -n " checking..."
@@ -1189,6 +1157,8 @@ echo -n " installing..."
 make install >> "$DIR/install.log" 2>&1
 echo "extension=mongodb.so" >> "$DIR/bin/php7/bin/php.ini"
 echo " done!"
+
+cd "../"
 
 if [[ "$HAVE_XDEBUG" == "yes" ]]; then
 	get_pecl_extension "xdebug" "$EXT_XDEBUG_VERSION"
@@ -1213,6 +1183,7 @@ if [[ "$HAVE_XDEBUG" == "yes" ]]; then
 	echo " done!"
 	write_out INFO "Xdebug is included, but disabled by default. To enable it, change 'xdebug.mode' in your php.ini file."
 fi
+
 
 cd "$DIR"
 if [ "$DO_CLEANUP" == "yes" ]; then
