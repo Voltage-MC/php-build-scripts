@@ -1,11 +1,18 @@
 # Custom PHP build scripts for Voltage-Groups
 
-use ``./compile.sh -t linux64 -j 4 -f -g``
+### PM4
+
+use ``./compile.sh -t linux64 -j 4 -f -g -P 4 -c ./download_cache``
+
+### PM5
+
+use ``./compile.sh -t linux64 -j4 -f x86_64 -P 5``
+
 - [Logs build](install.log) PHP_Linux-x86_64.tar.gz
 
 ## compile.sh
 
-Bash script used to compile PHP on Linux platforms. Make sure you have ``apt install -y autoconf automake libtool libtool-bin m4 wget gzip bzip2 bison g++ git cmake pkg-config re2c libssh2-1 libssh2-1-dev``.
+Bash script used to compile PHP on Linux platforms. Make sure you have ``apt install -y make autoconf automake libtool libtool-bin m4 wget libc-bin gzip bzip2 bison g++ git re2c libssh2-1 libssh2-1-dev php-redis libzstd-dev cmake pkg-config``.
 
 | Script flags | Description                                                                           |
 | ------------ | ------------------------------------------------------------------------------------- |
