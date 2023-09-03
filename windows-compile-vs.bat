@@ -258,6 +258,8 @@ call configure^
  --with-mp=auto^
  --with-prefix=pocketmine-php-bin^
  --%PHP_HAVE_DEBUG%^
+ --with-mongodb-system-libs="yes"^
+ --with-mongodb-ssl^
  --disable-all^
  --disable-cgi^
  --enable-cli^
@@ -279,6 +281,8 @@ call configure^
  --enable-opcache^
  --enable-opcache-jit=%PHP_JIT_ENABLE_ARG%^
  --enable-phar^
+ --enable-vanillagenerator^
+ --enable-zstd^
  --enable-recursionguard=shared^
  --enable-sockets^
  --enable-tokenizer^
@@ -371,6 +375,7 @@ if "%PM_VERSION_MAJOR%" geq "5" (
 (echo extension=php_sqlite3.dll)>>"%php_ini%"
 (echo ;Optional extensions, supplied for debugging)>>"%php_ini%"
 (echo extension=php_recursionguard.dll)>>"%php_ini%"
+(echo extension=mongodb.dll)>>"%php_ini%"
 (echo recursionguard.enabled=0 ;disabled due to minor performance impact, only enable this if you need it for debugging)>>"%php_ini%"
 (echo ;extension=php_arraydebug.dll)>>"%php_ini%"
 (echo.)>>"%php_ini%"
@@ -437,6 +442,10 @@ call :get-zip https://github.com/%~3/%~4/archive/%~2.zip || exit /B 1
 move %~4-%~2 %~1 >>"%log_file%" 2>&1 || exit /B 1
 exit /B 0
 
+:get-extension-zip-from-pecl:
+call :pm-echo " - %~1: downloading %~2..."
+call :get-zip https://windows.php.net/downloads/pecl/releases/%~3/%~2/php_%~3-%~2-%PHP_MAJOR_VER%-nts-vs16-x64.zip || exit /B 1
+exit /B 0
 
 :get-zip
 setlocal

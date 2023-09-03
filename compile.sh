@@ -1284,6 +1284,25 @@ if [ "$COMPILE_TARGET" == "mac-"* ]; then
 	echo "" >> "$INSTALL_DIR/bin/php.ini"
 	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 fi
+if [ "$COMPILE_TARGET" == "mac-"* ]; then
+	#we don't have permission to allocate executable memory on macOS due to not being codesigned
+	#workaround this for now by disabling PCRE JIT
+	echo "" >> "$INSTALL_DIR/bin/php.ini"
+	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
+fi
+
+echo -n "[MongoDB] downloading..."
+git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
+echo -n " checking..."
+cd mongo-php-driver
+git submodule update --init  >> "$DIR/install.log" 2>&1
+$DIR/bin/php7/bin/phpize >> "$DIR/install.log" 2>&1
+./configure --with-php-config="$DIR/bin/php7/bin/php-config" >> "$DIR/install.log" 2>&1
+echo -n " compiling..."
+make all >> "$DIR/install.log" 2>&1
+echo -n " installing..."
+make install >> "$DIR/install.log" 2>&1
+echo "extension=mongodb.so" >> "$DIR/bin/php7/bin/php.ini"
 
 write_done
 
