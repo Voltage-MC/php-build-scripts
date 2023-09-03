@@ -1,23 +1,22 @@
-#!/bin/bash
-[ -z "$PHP_VERSION" ] && PHP_VERSION="8.2.5"
+#!/usr/bin/env bash
+[ -z "$PHP_VERSION" ] && PHP_VERSION="8.2.7"
 
 ZLIB_VERSION="1.2.13"
 GMP_VERSION="6.2.1"
-CURL_VERSION="curl-8_0_1"
+CURL_VERSION="curl-8_1_2"
 YAML_VERSION="0.2.5"
 LEVELDB_VERSION="1c7564468b41610da4f498430e795ca4de0931ff"
 LIBXML_VERSION="2.10.1" #2.10.2 requires automake 1.16.3, which isn't easily available on Ubuntu 20.04
 LIBPNG_VERSION="1.6.39"
 LIBJPEG_VERSION="9e"
-OPENSSL_VERSION="3.1.0"
+OPENSSL_VERSION="3.1.1"
 LIBZIP_VERSION="1.9.2"
 SQLITE3_YEAR="2023"
-SQLITE3_VERSION="3410200" #3.41.2
+SQLITE3_VERSION="3420000" #3.42.0
 LIBDEFLATE_VERSION="495fee110ebb48a5eb63b75fd67e42b2955871e2" #1.18
 
-EXT_PTHREADS_VERSION_PM4="4.2.1"
-EXT_PTHREADS_VERSION_PM5="5.3.1"
-EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM4"
+EXT_PTHREADS_VERSION="4.2.1"
+EXT_PMMPTHREAD_VERSION="6.0.4"
 EXT_YAML_VERSION="2.2.3"
 EXT_LEVELDB_VERSION="317fdcd8415e1566fc2835ce2bdb8e19b890f9f3"
 EXT_CHUNKUTILS2_VERSION="0.3.5"
@@ -27,7 +26,8 @@ EXT_CRYPTO_VERSION="0.3.2"
 EXT_RECURSIONGUARD_VERSION="0.1.0"
 EXT_LIBDEFLATE_VERSION="0.2.1"
 EXT_MORTON_VERSION="0.1.2"
-EXT_XXHASH_VERSION="0.1.1"
+EXT_XXHASH_VERSION="0.2.0"
+EXT_ARRAYDEBUG_VERSION="0.1.0"
 
 function write_out {
 	echo "[$1] $2"
@@ -111,45 +111,6 @@ if [ $ERRORS -ne 0 ]; then
 	exit 1
 fi
 
-#Needed to use aliases
-shopt -s expand_aliases
-type wget >> "$DIR/install.log" 2>&1
-if [ $? -eq 0 ]; then
-	alias _download_file="wget --no-check-certificate -nv -O -"
-else
-	type curl >> "$DIR/install.log" 2>&1
-	if [ $? -eq 0 ]; then
-		alias _download_file="curl --insecure --silent --show-error --location --globoff"
-	else
-		echo "error, curl or wget not found"
-		exit 1
-	fi
-fi
-
-DOWNLOAD_CACHE=""
-
-function download_file {
-	local url="$1"
-	local prefix="$2"
-	local cached_filename="$prefix-${url##*/}"
-
-	if [[ "$DOWNLOAD_CACHE" != "" ]]; then
-		if [[ ! -d "$DOWNLOAD_CACHE" ]]; then
-			mkdir "$DOWNLOAD_CACHE" >> "$DIR/install.log" 2>&1
-		fi
-		if [[ -f "$DOWNLOAD_CACHE/$cached_filename" ]]; then
-			echo "Cache hit for URL: $url" >> "$DIR/install.log"
-		else
-			echo "Downloading file to cache: $url" >> "$DIR/install.log"
-			_download_file "$1" > "$DOWNLOAD_CACHE/$cached_filename" 2>> "$DIR/install.log"
-		fi
-		cat "$DOWNLOAD_CACHE/$cached_filename" 2>> "$DIR/install.log"
-	else
-		echo "Downloading non-cached file: $url" >> "$DIR/install.log"
-		_download_file "$1" 2>> "$DIR/install.log"
-	fi
-}
-
 #if type llvm-gcc >/dev/null 2>&1; then
 #	export CC="llvm-gcc"
 #	export CXX="llvm-g++"
@@ -169,7 +130,6 @@ COMPILE_TARGET=""
 IS_CROSSCOMPILE="no"
 IS_WINDOWS="no"
 DO_OPTIMIZE="no"
-OPTIMIZE_TARGET=""
 DO_STATIC="no"
 DO_CLEANUP="yes"
 COMPILE_DEBUG="no"
@@ -178,14 +138,16 @@ HAVE_OPCACHE="yes"
 HAVE_XDEBUG="yes"
 FSANITIZE_OPTIONS=""
 FLAGS_LTO=""
-
-LD_PRELOAD=""
+HAVE_OPCACHE_JIT="no"
 
 COMPILE_GD="no"
 
-PM_VERSION_MAJOR="4"
+PM_VERSION_MAJOR=""
 
-while getopts "::t:j:srdxff:gnva:P:c:l:" OPTION; do
+DOWNLOAD_INSECURE="no"
+DOWNLOAD_CACHE=""
+
+while getopts "::t:j:sdxfgnva:P:c:l:Ji" OPTION; do
 
 	case $OPTION in
 		l)
@@ -226,7 +188,6 @@ while getopts "::t:j:srdxff:gnva:P:c:l:" OPTION; do
 		f)
 			echo "[opt] Enabling abusive optimizations..."
 			DO_OPTIMIZE="yes"
-			OPTIMIZE_TARGET="$OPTARG"
 			;;
 		g)
 			echo "[opt] Will enable GD2"
@@ -247,6 +208,15 @@ while getopts "::t:j:srdxff:gnva:P:c:l:" OPTION; do
 		P)
 			PM_VERSION_MAJOR="$OPTARG"
 			;;
+		J)
+			echo "[opt] Compiling JIT support in OPcache (unstable)"
+			HAVE_OPCACHE_JIT="yes"
+			;;
+		i)
+			echo "[opt] Disabling SSL certificate verification for downloads"
+			echo "[WARNING] This is a security risk, please only use this if you know what you are doing!"
+			DOWNLOAD_INSECURE="yes"
+			;;
 		\?)
 			echo "Invalid option: -$OPTARG" >&2
 			exit 1
@@ -254,12 +224,57 @@ while getopts "::t:j:srdxff:gnva:P:c:l:" OPTION; do
 	esac
 done
 
-if [ "$PM_VERSION_MAJOR" -ge 5 ]; then
-	EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM5"
-else
-	EXT_PTHREADS_VERSION="$EXT_PTHREADS_VERSION_PM4"
+if [ "$PM_VERSION_MAJOR" == "" ]; then
+	echo "Please specify PocketMine-MP major version target with -P (e.g. -P5)"
+	exit 1
 fi
+
 write_out "opt" "Compiling with configuration for PocketMine-MP $PM_VERSION_MAJOR"
+
+#Needed to use aliases
+shopt -s expand_aliases
+type wget >> "$DIR/install.log" 2>&1
+if [ $? -eq 0 ]; then
+	wget_flags=""
+	if [ "$DOWNLOAD_INSECURE" == "yes" ]; then
+		wget_flags="--no-check-certificate"
+	fi
+	alias _download_file="wget $wget_flags -nv -O -"
+else
+	type curl >> "$DIR/install.log" 2>&1
+	if [ $? -eq 0 ]; then
+		curl_flags=""
+		if [ "$DOWNLOAD_INSECURE" == "yes" ]; then
+			curl_flags="--insecure"
+		fi
+		alias _download_file="curl $curl_flags --silent --show-error --location --globoff"
+	else
+		echo "error, curl or wget not found"
+		exit 1
+	fi
+fi
+
+function download_file {
+	local url="$1"
+	local prefix="$2"
+	local cached_filename="$prefix-${url##*/}"
+
+	if [[ "$DOWNLOAD_CACHE" != "" ]]; then
+		if [[ ! -d "$DOWNLOAD_CACHE" ]]; then
+			mkdir "$DOWNLOAD_CACHE" >> "$DIR/install.log" 2>&1
+		fi
+		if [[ -f "$DOWNLOAD_CACHE/$cached_filename" ]]; then
+			echo "Cache hit for URL: $url" >> "$DIR/install.log"
+		else
+			echo "Downloading file to cache: $url" >> "$DIR/install.log"
+			_download_file "$1" > "$DOWNLOAD_CACHE/$cached_filename" 2>> "$DIR/install.log"
+		fi
+		cat "$DOWNLOAD_CACHE/$cached_filename" 2>> "$DIR/install.log"
+	else
+		echo "Downloading non-cached file: $url" >> "$DIR/install.log"
+		_download_file "$1" 2>> "$DIR/install.log"
+	fi
+}
 
 GMP_ABI=""
 TOOLCHAIN_PREFIX=""
@@ -268,30 +283,7 @@ CMAKE_GLOBAL_EXTRA_FLAGS=""
 
 if [ "$IS_CROSSCOMPILE" == "yes" ]; then
 	export CROSS_COMPILER="$PATH"
-	if [[ "$COMPILE_TARGET" == "win" ]] || [[ "$COMPILE_TARGET" == "win64" ]]; then
-		TOOLCHAIN_PREFIX="x86_64-w64-mingw32"
-		[ -z "$march" ] && march=x86_64;
-		[ -z "$mtune" ] && mtune=nocona;
-		CFLAGS="$CFLAGS -mconsole"
-		CONFIGURE_FLAGS="--host=$TOOLCHAIN_PREFIX --target=$TOOLCHAIN_PREFIX --build=$TOOLCHAIN_PREFIX"
-		IS_WINDOWS="yes"
-		OPENSSL_TARGET="mingw64"
-		GMP_ABI="64"
-		echo "[INFO] Cross-compiling for Windows 64-bit"
-	elif [ "$COMPILE_TARGET" == "mac" ]; then
-		[ -z "$march" ] && march=prescott;
-		[ -z "$mtune" ] && mtune=generic;
-		CFLAGS="$CFLAGS -fomit-frame-pointer";
-		TOOLCHAIN_PREFIX="i686-apple-darwin10"
-		CONFIGURE_FLAGS="--host=$TOOLCHAIN_PREFIX"
-		#zlib doesn't use the correct ranlib
-		RANLIB=$TOOLCHAIN_PREFIX-ranlib
-		CFLAGS="$CFLAGS -Qunused-arguments -Wno-error=unused-command-line-argument-hard-error-in-future"
-		ARCHFLAGS="-Wno-error=unused-command-line-argument-hard-error-in-future"
-		OPENSSL_TARGET="darwin64-x86_64-cc"
-		GMP_ABI="32"
-		echo "[INFO] Cross-compiling for Intel MacOS"
-	elif [ "$COMPILE_TARGET" == "android-aarch64" ]; then
+	if [ "$COMPILE_TARGET" == "android-aarch64" ]; then
 		COMPILE_FOR_ANDROID=yes
 		[ -z "$march" ] && march="armv8-a";
 		[ -z "$mtune" ] && mtune=generic;
@@ -306,7 +298,7 @@ if [ "$IS_CROSSCOMPILE" == "yes" ]; then
 		echo "[INFO] Cross-compiling for Android ARMv8 (aarch64)"
 	#TODO: add cross-compile for aarch64 platforms (ios, rpi)
 	else
-		echo "Please supply a proper platform [mac win win64 android-aarch64] to cross-compile"
+		echo "Please supply a proper platform [android-aarch64] to cross-compile"
 		exit 1
 	fi
 else
@@ -335,7 +327,6 @@ else
 			export DYLD_LIBRARY_PATH="@loader_path/../lib"
 		fi
 		CFLAGS="$CFLAGS -Qunused-arguments -Wno-error=unused-command-line-argument-hard-error-in-future"
-		ARCHFLAGS="-Wno-error=unused-command-line-argument-hard-error-in-future"
 		GMP_ABI="64"
 		OPENSSL_TARGET="darwin64-x86_64-cc"
 		CMAKE_GLOBAL_EXTRA_FLAGS="-DCMAKE_OSX_ARCHITECTURES=x86_64"
@@ -373,6 +364,7 @@ fi
 
 if [ "$DO_STATIC" == "yes" ]; then
 	HAVE_OPCACHE="no" #doesn't work on static builds
+	HAVE_OPCACHE_JIT="no"
 	echo "[warning] OPcache cannot be used on static builds; this may have a negative effect on performance"
 	if [ "$FSANITIZE_OPTIONS" != "" ]; then
 		echo "[warning] Sanitizers cannot be used on static builds"
@@ -380,22 +372,6 @@ if [ "$DO_STATIC" == "yes" ]; then
 	if [ "$HAVE_XDEBUG" == "yes" ]; then
 	  write_out "warning" "Xdebug cannot be built in static mode"
 	  HAVE_XDEBUG="no"
-	fi
-fi
-
-if [ "$DO_OPTIMIZE" != "no" ]; then
-	#FLAGS_LTO="-fvisibility=hidden -flto"
-	CFLAGS="$CFLAGS -O2 -ftree-vectorize -fomit-frame-pointer -funswitch-loops -fivopts"
-	if [ "$COMPILE_TARGET" != "mac-x86-64" ] && [ "$COMPILE_TARGET" != "mac-arm64" ]; then
-		CFLAGS="$CFLAGS -funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range"
-	fi
-
-	if [ "$OPTIMIZE_TARGET" == "arm" ]; then
-		CFLAGS="$CFLAGS -mfpu=vfp"
-	elif [ "$OPTIMIZE_TARGET" == "x86_64" ]; then
-		CFLAGS="$CFLAGS -mmmx -msse -msse2 -msse3 -mfpmath=sse -free -msahf -ftree-parallelize-loops=4"
-	elif [ "$OPTIMIZE_TARGET" == "x86" ]; then
-		CFLAGS="$CFLAGS -mmmx -msse -msse2 -mfpmath=sse -m128bit-long-double -malign-double -ftree-parallelize-loops=4"
 	fi
 fi
 
@@ -441,6 +417,23 @@ else
 	if [ $? -eq 0 ]; then
 		CFLAGS="-march=$march -fno-gcse $CFLAGS"
 	fi
+fi
+
+if [ "$DO_OPTIMIZE" != "no" ]; then
+	#FLAGS_LTO="-fvisibility=hidden -flto"
+	CFLAGS="$CFLAGS -O2"
+	GENERIC_CFLAGS="$CFLAGS -ftree-vectorize -fomit-frame-pointer -funswitch-loops -fivopts"
+	$CC $CFLAGS $GENERIC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
+	if [ $? -eq 0 ]; then
+		CFLAGS="$CFLAGS $GENERIC_CFLAGS"
+	fi
+	#clang does not understand the following and will fail
+	GCC_CFLAGS="$CFLAGS -funsafe-loop-optimizations -fpredictive-commoning -ftracer -ftree-loop-im -frename-registers -fcx-limited-range"
+	$CC $CFLAGS $GCC_CFLAGS -o test test.c >> "$DIR/install.log" 2>&1
+	if [ $? -eq 0 ]; then
+		CFLAGS="$CFLAGS $GCC_CFLAGS"
+	fi
+	#TODO: -ftree-parallelize-loops requires OpenMP - not sure if it will provide meaningful improvements yet
 fi
 
 if [ "$FSANITIZE_OPTIONS" != "" ]; then
@@ -572,15 +565,13 @@ function build_openssl {
 		local EXTRA_FLAGS="shared"
 	fi
 
-	WITH_OPENSSL="--with-openssl=$INSTALL_DIR"
-
 	write_library openssl "$OPENSSL_VERSION"
 	local openssl_dir="./openssl-$OPENSSL_VERSION"
 
 	if cant_use_cache "$openssl_dir"; then
 		rm -rf "$openssl_dir"
 		write_download
-		download_file "http://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" "openssl" | tar -zx >> "$DIR/install.log" 2>&1
+		download_file "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz" "openssl" | tar -zx >> "$DIR/install.log" 2>&1
 
 		echo -n " checking..."
 		cd "$openssl_dir"
@@ -780,7 +771,7 @@ function build_libjpeg {
 	if cant_use_cache "$libjpeg_dir"; then
 		rm -rf "$libjpeg_dir"
 		write_download
-		download_file "http://ijg.org/files/jpegsrc.v$LIBJPEG_VERSION.tar.gz" "libjpeg" | tar -zx >> "$DIR/install.log" 2>&1
+		download_file "https://ijg.org/files/jpegsrc.v$LIBJPEG_VERSION.tar.gz" "libjpeg" | tar -zx >> "$DIR/install.log" 2>&1
 		mv jpeg-$LIBJPEG_VERSION "$libjpeg_dir"
 		echo -n " checking..."
 		cd "$libjpeg_dir"
@@ -1000,14 +991,19 @@ function get_github_extension {
 # 1: extension name
 # 2: extension version
 function get_pecl_extension {
-	get_extension_tar_gz "$1" "$2" "http://pecl.php.net/get/$1-$2.tgz" "$1-$2"
+	get_extension_tar_gz "$1" "$2" "https://pecl.php.net/get/$1-$2.tgz" "$1-$2"
 }
 
 cd "$BUILD_DIR/php"
 echo "[PHP] Downloading additional extensions..."
 
-get_github_extension "pthreads" "$EXT_PTHREADS_VERSION" "pmmp" "pthreads" #"v" needed for release tags because github removes the "v"
-#get_pecl_extension "pthreads" "$EXT_PTHREADS_VERSION"
+if [ "$PM_VERSION_MAJOR" -ge 5 ]; then
+	get_github_extension "pmmpthread" "$EXT_PMMPTHREAD_VERSION" "pmmp" "ext-pmmpthread"
+	THREAD_EXT_FLAGS="--enable-pmmpthread"
+else
+	get_github_extension "pthreads" "$EXT_PTHREADS_VERSION" "pmmp" "ext-pmmpthread" #"v" needed for release tags because github removes the "v"
+	THREAD_EXT_FLAGS="--enable-pthreads"
+fi
 
 get_github_extension "yaml" "$EXT_YAML_VERSION" "php" "pecl-file_formats-yaml"
 #get_pecl_extension "yaml" "$EXT_YAML_VERSION"
@@ -1033,6 +1029,8 @@ get_github_extension "libdeflate" "$EXT_LIBDEFLATE_VERSION" "pmmp" "ext-libdefla
 get_github_extension "morton" "$EXT_MORTON_VERSION" "pmmp" "ext-morton"
 
 get_github_extension "xxhash" "$EXT_XXHASH_VERSION" "pmmp" "ext-xxhash"
+
+get_github_extension "arraydebug" "$EXT_ARRAYDEBUG_VERSION" "pmmp" "ext-arraydebug"
 
 echo -n "[PHP]"
 
@@ -1129,7 +1127,7 @@ $HAS_DEBUG \
 --enable-mbstring \
 --disable-mbregex \
 --enable-calendar \
---enable-pthreads \
+$THREAD_EXT_FLAGS \
 --enable-fileinfo \
 --with-libxml \
 --enable-xml \
@@ -1159,11 +1157,12 @@ $HAVE_MYSQLI \
 --enable-cli \
 --enable-ftp \
 --enable-opcache=$HAVE_OPCACHE \
---enable-opcache-jit=$HAVE_OPCACHE \
+--enable-opcache-jit=$HAVE_OPCACHE_JIT \
 --enable-igbinary \
 --with-crypto \
 --enable-recursionguard \
 --enable-xxhash \
+--enable-arraydebug \
 $HAVE_VALGRIND \
 $CONFIGURE_FLAGS >> "$DIR/install.log" 2>&1
 echo -n " compiling..."
@@ -1199,7 +1198,7 @@ function relativize_macos_library_paths {
 
 function relativize_macos_all_libraries_paths {
 	set +e
-	for _library in $(ls "$INSTALL_DIR/lib/"*".dylib"); do
+	for _library in $(find "$INSTALL_DIR" -name "*.dylib" -o -name "*.so"); do
 		relativize_macos_library_paths "$_library"
 	done
 	set -e
@@ -1243,12 +1242,14 @@ if [ "$HAVE_OPCACHE" == "yes" ]; then
 	echo "opcache.revalidate_freq=0" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.file_update_protection=0" >> "$INSTALL_DIR/bin/php.ini"
 	echo "opcache.optimization_level=0x7FFEBFFF ;https://github.com/php/php-src/blob/53c1b485741f31a17b24f4db2b39afeb9f4c8aba/ext/opcache/Optimizer/zend_optimizer.h" >> "$INSTALL_DIR/bin/php.ini"
-	echo "" >> "$INSTALL_DIR/bin/php.ini"
-	echo "; ---- ! WARNING ! ----" >> "$INSTALL_DIR/bin/php.ini"
-	echo "; JIT can provide big performance improvements, but as of PHP 8.0.8 it is still unstable. For this reason, it is disabled by default." >> "$INSTALL_DIR/bin/php.ini"
-	echo "; Enable it at your own risk. See https://www.php.net/manual/en/opcache.configuration.php#ini.opcache.jit for possible options." >> "$INSTALL_DIR/bin/php.ini"
-	echo "opcache.jit=off" >> "$INSTALL_DIR/bin/php.ini"
-	echo "opcache.jit_buffer_size=128M" >> "$INSTALL_DIR/bin/php.ini"
+	if [ "$HAVE_OPCACHE_JIT" == "yes" ]; then
+		echo "" >> "$INSTALL_DIR/bin/php.ini"
+		echo "; ---- ! WARNING ! ----" >> "$INSTALL_DIR/bin/php.ini"
+		echo "; JIT can provide big performance improvements, but as of PHP $PHP_VERSION it is still unstable. For this reason, it is disabled by default." >> "$INSTALL_DIR/bin/php.ini"
+		echo "; Enable it at your own risk. See https://www.php.net/manual/en/opcache.configuration.php#ini.opcache.jit for possible options." >> "$INSTALL_DIR/bin/php.ini"
+		echo "opcache.jit=off" >> "$INSTALL_DIR/bin/php.ini"
+		echo "opcache.jit_buffer_size=128M" >> "$INSTALL_DIR/bin/php.ini"
+	fi
 fi
 if [ "$COMPILE_TARGET" == "mac-"* ]; then
 	#we don't have permission to allocate executable memory on macOS due to not being codesigned
@@ -1256,8 +1257,6 @@ if [ "$COMPILE_TARGET" == "mac-"* ]; then
 	echo "" >> "$INSTALL_DIR/bin/php.ini"
 	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 fi
-
-echo " done!"
 
 echo -n "[MongoDB] downloading..."
 git clone https://github.com/mongodb/mongo-php-driver.git  >> "$DIR/install.log" 2>&1
