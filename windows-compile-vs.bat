@@ -3,7 +3,7 @@
 REM For future users: This file MUST have CRLF line endings. If it doesn't, lots of inexplicable undesirable strange behaviour will result.
 REM Also: Don't modify this version with sed, or it will screw up your line endings.
 set PHP_MAJOR_VER=8.3
-set PHP_VER=%PHP_MAJOR_VER%.0RC3
+set PHP_VER=%PHP_MAJOR_VER%.0
 set PHP_GIT_REV=php-%PHP_VER%
 set PHP_DISPLAY_VER=%PHP_VER%
 set PHP_SDK_VER=2.2.0
@@ -23,8 +23,7 @@ set PTHREAD_W32_VER=3.0.0
 set LEVELDB_MCPE_VER=1c7564468b41610da4f498430e795ca4de0931ff
 set LIBDEFLATE_VER=dd12ff2b36d603dbb7fa8838fe7e7176fcbd4f6f
 
-set PHP_PTHREADS_VER=4.2.2
-set PHP_PMMPTHREAD_VER=6.0.10
+set PHP_PMMPTHREAD_VER=6.0.12
 set PHP_YAML_VER=2.2.3
 set PHP_CHUNKUTILS2_VER=0.3.5
 set PHP_IGBINARY_VER=3.2.14
@@ -35,7 +34,8 @@ set PHP_MORTON_VER=0.1.2
 set PHP_LIBDEFLATE_VER=0.2.1
 set PHP_XXHASH_VER=0.2.0
 set PHP_XDEBUG_VER=3.2.2
-set PHP_ARRAYDEBUG_VER=0.1.0
+set PHP_ARRAYDEBUG_VER=0.2.0
+set PHP_ENCODING_VER=0.2.3
 
 set script_path=%~dp0
 set log_file=%script_path%compile.log
@@ -218,14 +218,7 @@ cd /D ..
 call :pm-echo "Getting additional PHP extensions..."
 cd /D php-src\ext
 
-set THREAD_EXT_FLAGS=""
-if "%PM_VERSION_MAJOR%" geq "5" (
-    call :get-extension-zip-from-github "pmmpthread" "%PHP_PMMPTHREAD_VER%" "pmmp" "ext-pmmpthread" || exit 1
-    set THREAD_EXT_FLAGS="--with-pmmpthread=shared"
-) else (
-    call :get-extension-zip-from-github "pthreads" "%PHP_PTHREADS_VER%" "pmmp" "ext-pmmpthread" || exit 1
-    set THREAD_EXT_FLAGS="--with-pthreads=shared"
-)
+call :get-extension-zip-from-github "pmmpthread"            "%PHP_PMMPTHREAD_VER%"            "pmmp"     "ext-pmmpthread" || exit 1
 call :get-extension-zip-from-github "yaml"                  "%PHP_YAML_VER%"                  "php"      "pecl-file_formats-yaml"  || exit 1
 call :get-extension-zip-from-github "chunkutils2"           "%PHP_CHUNKUTILS2_VER%"           "pmmp"     "ext-chunkutils2"         || exit 1
 call :get-extension-zip-from-github "igbinary"              "%PHP_IGBINARY_VER%"              "igbinary" "igbinary"                || exit 1
@@ -236,6 +229,7 @@ call :get-extension-zip-from-github "libdeflate"            "%PHP_LIBDEFLATE_VER
 call :get-extension-zip-from-github "xxhash"                "%PHP_XXHASH_VER%"                "pmmp"     "ext-xxhash"              || exit 1
 call :get-extension-zip-from-github "xdebug"                "%PHP_XDEBUG_VER%"                "xdebug"   "xdebug"                  || exit 1
 call :get-extension-zip-from-github "arraydebug"            "%PHP_ARRAYDEBUG_VER%"            "pmmp"     "ext-arraydebug"          || exit 1
+call :get-extension-zip-from-github "encoding"              "%PHP_ENCODING_VER%"              "pmmp"     "ext-encoding"            || exit 1
 
 call :pm-echo " - crypto: downloading %PHP_CRYPTO_VER%..."
 git clone https://github.com/bukka/php-crypto.git crypto >>"%log_file%" 2>&1 || exit 1
@@ -271,6 +265,7 @@ call configure^
  --enable-chunkutils2=shared^
  --enable-com-dotnet^
  --enable-ctype^
+ --enable-encoding=shared^
  --enable-fileinfo=shared^
  --enable-filter^
  --enable-hash^
@@ -305,7 +300,7 @@ call configure^
  --with-mysqlnd^
  --with-openssl^
  --with-pcre-jit^
- %THREAD_EXT_FLAGS%^
+ --with-pmmpthread=shared^
  --with-simplexml^
  --with-sodium^
  --with-sqlite3=shared^
@@ -346,11 +341,7 @@ call :pm-echo "Generating php.ini..."
 (echo error_reporting=-1)>>"%php_ini%"
 (echo zend.assertions=-1)>>"%php_ini%"
 (echo extension_dir=ext)>>"%php_ini%"
-if "%PM_VERSION_MAJOR%" geq "5" (
-    (echo extension=php_pmmpthread.dll)>>"%php_ini%"
-) else (
-    (echo extension=php_pthreads.dll)>>"%php_ini%"
-)
+(echo extension=php_pmmpthread.dll)>>"%php_ini%"
 (echo extension=php_openssl.dll)>>"%php_ini%"
 (echo extension=php_chunkutils2.dll)>>"%php_ini%"
 (echo extension=php_igbinary.dll)>>"%php_ini%"
@@ -367,7 +358,6 @@ if "%PM_VERSION_MAJOR%" geq "5" (
 (echo opcache.file_update_protection=0)>>"%php_ini%"
 (echo opcache.optimization_level=0x7FFEBFFF)>>"%php_ini%"
 (echo opcache.cache_id=PHP_BINARY ;prevent sharing SHM between different binaries - they won't work because of ASLR)>>"%php_ini%"
-(echo ;Optional extensions, supplied for PM3 use)>>"%php_ini%"
 (echo ;Optional extensions, supplied for plugin use)>>"%php_ini%"
 (echo extension=php_fileinfo.dll)>>"%php_ini%"
 (echo extension=php_gd.dll)>>"%php_ini%"
@@ -396,6 +386,8 @@ if "%PHP_JIT_ENABLE_ARG%"=="on" (
 (echo xdebug.profiler_output_name=cachegrind.%%s.%%p.%%r)>>"%php_ini%"
 (echo xdebug.gc_stats_output_name=gcstats.%%s.%%p.%%r)>>"%php_ini%"
 (echo xdebug.trace_output_name=trace.%%s.%%p.%%r)>>"%php_ini%"
+(echo ;Optional experimental extensions)>>"%php_ini%"
+(echo extension=php_encoding.dll)>>"%php_ini%"
 
 call :pm-echo "Xdebug is included, but disabled by default. To enable it, change 'xdebug.mode' in your php.ini file."
 
