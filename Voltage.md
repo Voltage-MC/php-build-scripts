@@ -6,7 +6,7 @@ use ``./compile.sh -j 4 -f -g -P 4 -c ./download_cache``
 
 ### PM5
 
-use ``./compile.sh -j 4 -f x86_64 -P 5``
+use ``./compile.sh -t linux64 -j 4 -g -P 5``
 
 - [Logs build](install.log) PHP_Linux-x86_64.tar.gz
 

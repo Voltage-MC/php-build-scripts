@@ -9,6 +9,7 @@ LEVELDB_VERSION="1c7564468b41610da4f498430e795ca4de0931ff"
 LIBXML_VERSION="2.10.1" #2.10.2 requires automake 1.16.3, which isn't easily available on Ubuntu 20.04
 LIBPNG_VERSION="1.6.40"
 LIBJPEG_VERSION="9e"
+LIBMONGOC_VERSION="1.23.2"
 OPENSSL_VERSION="3.1.4"
 LIBZIP_VERSION="1.10.1"
 SQLITE3_VERSION="3440200" #3.44.2
@@ -415,7 +416,7 @@ echo "}" >> test.c
 type $CC >> "$DIR/install.log" 2>&1 || { write_error "Please install \"$CC\""; exit 1; }
 
 if [ -z "$THREADS" ]; then
-	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."	
+	write_out "WARNING" "Only 1 thread is used by default. Increase thread count using -j (e.g. -j 4) to compile faster."
 	THREADS=1;
 fi
 [ -z "$march" ] && march=native;
@@ -862,6 +863,38 @@ function build_libxml2 {
 	write_done
 }
 
+function build_libmongoc {
+    local libmongoc_dir="./libmongoc-$LIBMONGOC_VERSION"
+    local cmake_flags="-DENABLE_AUTOMATIC_INIT_AND_CLEANUP=OFF \
+                      -DCMAKE_PREFIX_PATH=$INSTALL_DIR \
+                      -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR"
+
+    if [ "$DO_STATIC" == "yes" ]; then
+        cmake_flags="$cmake_flags -DENABLE_STATIC=ON -DENABLE_SHARED=OFF"
+    else
+        cmake_flags="$cmmake_flags -DENABLE_STATIC=OFF -DENABLE_SHARED=ON"
+    fi
+
+    echo "[libmongoc] Installing libmongoc-$LIBMONGOC_VERSION..."
+
+    if [ ! -d "$libmongoc_dir" ]; then
+        mkdir -p "$libmongoc_dir"
+        cd "$libmongoc_dir"
+        echo "Downloading mongo-c-driver-$LIBMONGOC_VERSION..."
+        download_file "https://github.com/mongodb/mongo-c-driver/releases/download/$LIBMONGOC_VERSION/mongo-c-driver-$LIBMONGOC_VERSION.tar.gz" | tar -zx >> "$DIR/install.log" 2>&1
+
+        cmake $cmake_flags . >> "$DIR/install.log" 2>&1
+        make -j $THREADS >> "$DIR/install.log" 2>&1
+    else
+        cd "$libmongoc_dir"
+    fi
+
+    echo "Installing..."
+    make install >> "$DIR/install.log" 2>&1
+    cd "$DIR"
+    echo "Done!"
+}
+
 function build_libzip {
 	#libzip
 	if [ "$DO_STATIC" == "yes" ]; then
@@ -993,7 +1026,7 @@ else
 	HAS_GD=""
 	HAS_LIBJPEG=""
 fi
-
+build_libmongoc
 build_libxml2
 build_libzip
 build_sqlite3
@@ -1052,6 +1085,8 @@ get_github_extension "leveldb" "$EXT_LEVELDB_VERSION" "pmmp" "php-leveldb"
 get_github_extension "chunkutils2" "$EXT_CHUNKUTILS2_VERSION" "pmmp" "ext-chunkutils2"
 
 get_github_extension "libdeflate" "$EXT_LIBDEFLATE_VERSION" "pmmp" "ext-libdeflate"
+
+get_pecl_extension "mongodb" "$EXT_MONGODB_VERSION"
 
 get_github_extension "morton" "$EXT_MORTON_VERSION" "pmmp" "ext-morton"
 
@@ -1140,6 +1175,7 @@ RANLIB=$RANLIB CFLAGS="$CFLAGS $FLAGS_LTO" CXXFLAGS="$CXXFLAGS $FLAGS_LTO" LDFLA
 --with-openssl \
 --with-zip \
 --with-libdeflate \
+--enable-mongodb \
 $HAS_LIBJPEG \
 $HAS_GD \
 --with-leveldb="$INSTALL_DIR" \
@@ -1274,12 +1310,6 @@ if [ "$HAVE_OPCACHE" == "yes" ]; then
 		echo "opcache.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 		echo "opcache.jit_buffer_size=128M" >> "$INSTALL_DIR/bin/php.ini"
 	fi
-fi
-if [ "$COMPILE_TARGET" == "mac-"* ]; then
-	#we don't have permission to allocate executable memory on macOS due to not being codesigned
-	#workaround this for now by disabling PCRE JIT
-	echo "" >> "$INSTALL_DIR/bin/php.ini"
-	echo "pcre.jit=off" >> "$INSTALL_DIR/bin/php.ini"
 fi
 if [ "$COMPILE_TARGET" == "mac-"* ]; then
 	#we don't have permission to allocate executable memory on macOS due to not being codesigned
